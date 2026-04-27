@@ -1,0 +1,333 @@
+﻿<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.claro.sp.automation.lineas.mapper.prod.ProdLineMapper">
+    <select id="findRandomNimAr" parameterType="CreationContext" resultType="string">
+        select #{codeArea} || to_char(trunc(dbms_random.value(10000, 99999))) ||
+               to_char(trunc(dbms_random.value(#{beginRange}, #{endRange}))) as nim
+          from dual
+    </select>
+
+    <select id="findRandomNimArNode" parameterType="CreationContext" resultType="string">
+        select (#{codeArea} || to_char(trunc(dbms_random.value(10000, 99999))) ||
+               to_char(trunc(dbms_random.value(ste_ini_rango, ste_fin_rango)))) as nim
+          from sitios_tecnotree
+         where ste_rango = #{node}
+           and sysdate between ste_start_date and nvl(ste_end_date, sysdate + 1)
+    </select>
+
+    <select id="findRandomNimPy" parameterType="CreationContext" resultType="string">
+        select #{codeArea} || to_char(trunc(dbms_random.value(41699, 99999))) ||
+               to_char(trunc(dbms_random.value(#{beginRange}, #{endRange}))) as nim
+          from dual
+    </select>
+
+    <select id="findRandomNimUy" parameterType="CreationContext" resultType="string">
+        select #{codeArea} || to_char(trunc(dbms_random.value(1000, 9999))) ||
+               to_char(trunc(dbms_random.value(#{beginRange}, #{endRange}))) as nim
+          from dual
+    </select>
+
+    <select id="countCellular" parameterType="string" resultType="int">
+        select count(1) from cellulars where clu_cellular_number = #{cellularNumber}
+    </select>
+
+    <select id="findSubId" resultType="string">
+        select p.ppa_value || c.clu_bill_number as subid
+          from cellulars c,
+               prepay_parameters p
+         where (c.clu_bill_number = #{billNumber} or c.clu_cellular_number = #{cellularNumber})
+           and p.ppa_name in (
+                select decode(c2.clu_type, 'CPP', 'PREFIJOS_GSM_CPP', 'MPP', 'PREFIJOS_GSM_MPP')
+                  from cellulars c2
+                 where (c2.clu_bill_number = #{billNumber} or c2.clu_cellular_number = #{cellularNumber})
+           )
+           and sysdate between p.ppa_start_date and nvl(p.ppa_end_date, sysdate + 1)
+           and rownum = 1
+    </select>
+
+    <select id="findRatePlanId" parameterType="string" resultType="string">
+        select rppr_rpl_id
+          from rate_plan_profiles
+         where rppr_gprf_id = #{profileId}
+           and sysdate between rppr_start_date and nvl(rppr_end_date, sysdate)
+           and rownum = 1
+    </select>
+
+    <select id="nextSequenceId" parameterType="string" resultType="string">
+        select ${sequenceName}.nextval seq from dual
+    </select>
+
+    <select id="countCellularAccountId" parameterType="string" resultType="int">
+        select count(1) from cellular_accounts where cac_id = #{id}
+    </select>
+
+    <select id="countCallRestrictionId" parameterType="string" resultType="int">
+        select count(1) from cellular_call_restrictions where ccr_id = #{id}
+    </select>
+
+    <insert id="insertActivationRange" parameterType="CreationContext">
+        <![CDATA[
+        begin
+          delete from activation_ranges where acr_starting_range = #{cellularNumber};
+          insert into activation_ranges
+            (acr_starting_range,
+             acr_ending_range,
+             acr_blc_block_code,
+             acr_mpp,
+             acr_bill_prefix,
+             acr_start_bill_range,
+             acr_end_bill_range,
+             acr_starting_bill,
+             acr_ending_bill,
+             acr_usr_id,
+             acr_add_date)
+          values
+            (#{cellularNumber},
+             #{cellularNumber},
+             #{blockCode},
+             'N',
+             substr(#{cellularNumber}, 1, case when #{expectedLineLength} = 10 then 3 else 2 end),
+             substr(#{cellularNumber}, case when #{expectedLineLength} = 10 then 4 else 3 end),
+             substr(#{cellularNumber}, case when #{expectedLineLength} = 10 then 4 else 3 end),
+             #{billNumber},
+             #{billNumber},
+             nvl(#{subId}, 'WEB'),
+             sysdate);
+        end;
+        ]]>
+    </insert>
+
+    <insert id="insertCellular" parameterType="CreationContext">
+        <![CDATA[
+        begin
+          insert into cellulars
+            (clu_cellular_number, clu_activation_date, clu_status, clu_add_date, clu_stg_id,
+             clu_cmp_id, clu_acc_id, clu_dlr_id, clu_usr_id, clu_clt_id, clu_blc_block_code,
+             clu_type, clu_cbt_id, clu_bill_number, clu_npa_digits, clu_pro_mode_type,
+             clu_line_type, clu_tmt_id)
+          values
+            (#{cellularNumber}, sysdate, #{statusStealth}, sysdate, 'AH', 1,
+             #{accountId}, #{dealerId}, 'STL', #{clientId}, #{blockCode}, 'CPP',
+             #{businessType}, #{billNumber}, 2, 'GSM', 'COMERCIAL', '138C');
+        end;
+        ]]>
+    </insert>
+
+    <update id="updateBillNumber" parameterType="CreationContext">
+        update cellulars set clu_bill_number = #{billNumber} where clu_cellular_number = #{cellularNumber}
+    </update>
+
+    <insert id="insertBusinessHistory" parameterType="CreationContext">
+        insert into cellular_business_histories (cbh_clu_cellular_number, cbh_cbt_id, cbh_start_date)
+        values (#{cellularNumber}, #{businessType}, sysdate)
+    </insert>
+
+    <insert id="insertCellularAccount">
+        insert into cellular_accounts
+            (cac_id, cac_clu_cellular_number, cac_acc_id, cac_start_date, cac_end_date, cac_usr_id, cac_add_date)
+        values
+            (#{id}, #{context.cellularNumber}, #{context.accountId}, sysdate, null, 'WEB', sysdate)
+    </insert>
+
+    <insert id="createSim">
+        <![CDATA[
+        declare
+          v_lote_id         lotes_sims.lote_id%type := 0;
+          v_lote_in_table   lotes_sims.lote_id%type := 0;
+          v_imsi_in_table   sims.sim_imsi%type := 0;
+          v_imsi_generated  sims.sim_imsi%type := 0;
+          v_iccid_generated sims.sim_iccid%type;
+        begin
+          while v_lote_in_table = v_lote_id loop
+            select lote_id_seq.nextval into v_lote_id from dual;
+            begin
+              select lote_id into v_lote_in_table from lotes_sims where lote_id = v_lote_id;
+            exception
+              when no_data_found then null;
+            end;
+          end loop;
+          while v_imsi_in_table = v_imsi_generated loop
+            select trunc(dbms_random.value(100000000000000, 999999999999999)) into v_imsi_generated from dual;
+            select v_imsi_generated || trunc(dbms_random.value(1000, 9999)) into v_iccid_generated from dual;
+            begin
+              select sim_imsi into v_imsi_in_table from sims where sim_imsi = v_imsi_generated;
+            exception
+              when no_data_found then null;
+            end;
+          end loop;
+          insert into lotes_sims
+            (lote_id, lote_quant, lote_sim_type, lote_subscription_type, lote_electrical_profile,
+             lote_graphic_profile, lote_transport_key, lote_transport_kappli, lote_po_ref_number,
+             lote_imsi_start_number, lote_iccid_start_number, lote_supplier, lote_technology,
+             lote_country, lote_proc_date, lote_file_name)
+          values
+            (v_lote_id, 10000, 'PLUG-IN', 0, '01.01C', '01.01', 1, 1, 'S/N',
+             v_imsi_generated, v_iccid_generated, 31, 'USIM 256K', #{country}, sysdate, #{subId});
+          insert into sims (sim_lote_id, sim_pro_id, sim_imsi, sim_iccid, sim_msisdn)
+          values (v_lote_id, '20310040', v_imsi_generated, v_iccid_generated || 'F', #{subId});
+          insert into sim_histories (sih_sim_iccid, sih_chs_id, sih_start_date, sih_end_date, sih_usr_id)
+          values (v_iccid_generated || 'F', '217', sysdate, null, 'WEB');
+        end;
+        ]]>
+    </insert>
+
+    <select id="findSim" parameterType="string" resultType="SimData">
+        select sim_imsi as imsi,
+               sim_iccid as iccid,
+               sim_msisdn as msisdn
+          from sims
+         where sim_msisdn = #{subId}
+           and rownum = 1
+    </select>
+
+    <update id="updateCellularEsn">
+        update cellulars set clu_esn = #{esn} where clu_cellular_number = #{cellularNumber}
+    </update>
+
+    <insert id="assignSimToCellular" parameterType="AssignSimRequest">
+        <![CDATA[
+        declare
+          v_existe          number(1);
+          v_nim             cellulars.clu_cellular_number%type := #{cellularNumber};
+          v_iccid           sims.sim_iccid%type := #{iccid};
+          v_hexa            electronical_serial_numbers.esn_hexa%type := trim(trailing 'F' from #{iccid});
+          v_activation_date service_request_forms.srf_activation_date%type := sysdate;
+          v_pro_id          sims.sim_pro_id%type;
+          v_imsi            sims.sim_imsi%type;
+          v_esc_start_date  esn_cellulars.esc_start_date%type;
+        begin
+          select sim_pro_id, sim_imsi into v_pro_id, v_imsi from sims where sim_iccid = v_iccid;
+          begin
+            insert into electronical_serial_numbers (esn_hexa, financial_flag, esn_pro_id)
+            values (v_hexa, 'N', v_pro_id);
+          exception
+            when dup_val_on_index then
+              update electronical_serial_numbers set financial_flag = 'N', esn_pro_id = v_pro_id where esn_hexa = v_hexa;
+          end;
+          begin
+            select 1 into v_existe from esn_cellulars where esc_clu_cellular_number = v_nim and esc_end_date is null;
+          exception
+            when no_data_found then v_existe := 0;
+          end;
+          if v_existe = 1 then
+            update esn_cellulars set esc_esn_hexa = v_hexa where esc_clu_cellular_number = v_nim and esc_end_date is null;
+          else
+            insert into esn_cellulars
+              (esc_esn_hexa, esc_clu_cellular_number, esc_start_date, esc_est_id, esc_est_own_id, esc_dlr_id, esc_usr_id)
+            values
+              (v_hexa, v_nim, sysdate, 'DIST', 'CTI', #{dealerId}, 'WEB');
+          end if;
+          insert into cellular_terminals
+            (cet_id, cet_sim_iccid, cet_clu_cellular_number, cet_pro_id, cet_imei, cet_est_id, cet_est_own_id, cet_start_date)
+          values
+            (#{cetId}, v_hexa, v_nim, '20300001', '999999999999994', 'DIST', 'CTI', v_activation_date);
+          insert into cellular_terminal_status (cts_cet_id, cts_chs_id, cts_usr_id, cts_start_date)
+          values (#{cetId}, 221, 'WEB', v_activation_date);
+          update sims set sim_msisdn = #{subId} where sim_iccid = v_iccid;
+          select esc_start_date into v_esc_start_date from esn_cellulars where esc_clu_cellular_number = v_nim and esc_end_date is null;
+          update sim_histories set sih_end_date = v_esc_start_date where sih_sim_iccid = v_iccid and sih_chs_id = '217' and sih_end_date is null;
+          insert into sim_histories (sih_sim_iccid, sih_chs_id, sih_start_date, sih_usr_id)
+          values (v_iccid, '218', v_esc_start_date, 'WEB');
+        end;
+        ]]>
+    </insert>
+
+    <insert id="insertServiceStatus" parameterType="CreationContext">
+        insert into service_status
+            (sst_clu_cellular_number, sst_service_status, sst_start_date, sst_end_date, sst_add_date, sst_usr_id, sst_rsn_id)
+        values
+            (#{cellularNumber}, #{statusStealth}, sysdate, null, sysdate, user, 'WACTIV')
+    </insert>
+
+    <insert id="insertCellularCallRestriction">
+        insert into cellular_call_restrictions
+            (ccr_id, ccr_cr_id, ccr_start_date, ccr_tck_id, ccr_rmr_id, ccr_usr_id, ccr_clu_cellular_number, ccr_rsn_id, ccr_end_date)
+        values
+            (#{id}, #{context.callRestrictionId}, sysdate, null, null, 'WEB', #{context.cellularNumber}, 'WACTIV', null)
+    </insert>
+
+    <insert id="insertRatePlan" parameterType="CreationContext">
+        <![CDATA[
+        declare
+          v_end_date date := to_date('30/12/3999 11:59:59', 'dd/mm/yyyy hh24:mi:ss');
+          cursor c_requeridos(linea cellulars.clu_cellular_number%type) is
+            select bsg_stg_id
+              from business_service_type_groups,
+                   cellular_business_types
+             where bsg_bus_id = cbt_bus_id
+               and cbt_id = (select clu_cbt_id from cellulars where clu_cellular_number = linea)
+               and bsg_required_flag = 'Y';
+        begin
+          insert into cellular_plans
+            (cpl_clu_cellular_number, cpl_stg_id, cpl_rpl_id, cpl_start_date, cpl_end_date, cpl_due_date, cpl_usr_id, cpl_add_date)
+            select #{cellularNumber}, rpa_stg_id, rpa_rpl_id_assignment, sysdate, v_end_date, v_end_date, 'WEB', sysdate
+              from rate_plan_assignments
+             where rpa_start_date <= trunc(sysdate)
+               and (rpa_end_date is null or rpa_end_date > trunc(sysdate))
+               and rpa_rpl_id_air = #{ratePlanSth};
+          for r_req in c_requeridos(#{cellularNumber}) loop
+            insert into cellular_plans
+              (cpl_clu_cellular_number, cpl_stg_id, cpl_rpl_id, cpl_start_date, cpl_end_date, cpl_due_date, cpl_usr_id, cpl_add_date)
+            values
+              (#{cellularNumber}, r_req.bsg_stg_id, #{ratePlanSth}, sysdate, v_end_date, v_end_date, 'WEB', sysdate);
+          end loop;
+        end;
+        ]]>
+    </insert>
+
+    <select id="findBasicPackIds" parameterType="string" resultType="string">
+        select cpa_pkt_id
+          from cel_business_types_packages
+         where cpa_cbt_id = (select clu_cbt_id from cellulars where clu_cellular_number = #{cellularNumber})
+           and cpa_default_flag = 'Y'
+           and cpa_start_date &lt;= sysdate
+           and cpa_end_date &gt;= sysdate
+    </select>
+
+    <insert id="insertCellularPackage">
+        insert into cellular_packages
+            (cpk_clu_cellular_number, cpk_pkt_id, cpk_activation_date, cpk_price_type, cpk_usr_id_is_load, cpk_move_type)
+        values
+            (#{cellularNumber}, #{packId}, sysdate, 'P', 'WEB', 'A')
+    </insert>
+
+    <insert id="insertCreditLimit" parameterType="CreationContext">
+        insert into credit_limit_assignments
+            (clas_clu_cellular_number, clas_pce_handle, clas_credit_limit_automatic, clas_credit_limit_manual,
+             clas_credit_limit_manual_flag, clas_credit_limit_excedent, clas_excedent_expiry_date, clas_start_date,
+             clas_user_id, clas_rsk_id, clas_rpl_id, clas_coefficient_value, clas_clu_bill_number,
+             clas_credit_limit_autoscore, clas_score_id, clas_coefscore_value, clas_plan_price)
+        values
+            (#{cellularNumber}, #{handle}, 8400, null, null, null, null,
+             to_date('12-07-2022 12:57:31', 'DD-MM-YYYY HH24:MI:SS'), 'PREPAGO', 'M', #{ratePlanSth}, 2,
+             #{billNumber}, 6300, '1M', 1, 4200)
+    </insert>
+
+    <delete id="deleteSubscriber">
+        <![CDATA[
+        declare
+          v_linea cellulars.clu_cellular_number%type := #{cellularNumber};
+          v_user updates.upd_usr_id%type := upper(#{user});
+        begin
+          delete from applied_tools where apt_clu_cellular_number = v_linea;
+          delete from cellular_call_restrictions where ccr_clu_cellular_number = v_linea;
+          delete from cellular_packages where cpk_clu_cellular_number = v_linea;
+          delete from service_status where sst_clu_cellular_number = v_linea;
+          delete from cellular_plans where cpl_clu_cellular_number = v_linea;
+          delete from esn_cellulars where esc_clu_cellular_number = v_linea;
+          delete from cellulars where clu_cellular_number = v_linea;
+          delete from activation_ranges where acr_starting_range = v_linea;
+          delete from cellular_business_histories where cbh_clu_cellular_number = v_linea;
+          delete from cellular_accounts where cac_clu_cellular_number = v_linea;
+          delete from cellular_services where cese_clu_cellular_number = v_linea;
+          delete from updates where upd_table_name in ('ACCOUNTS', 'CELLULARS') and upd_usr_id = v_user;
+          delete from gsm_wap_interfaces where gwi_clu_bill_number = v_linea;
+          delete from credit_limit_assignments where clas_clu_cellular_number = v_linea;
+          delete from planes_borrados where celular = v_linea;
+        end;
+        ]]>
+    </delete>
+</mapper>
+

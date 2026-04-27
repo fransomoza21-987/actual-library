@@ -1,0 +1,22 @@
+﻿<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE configuration
+        PUBLIC "-//mybatis.org//DTD Config 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-config.dtd">
+<configuration>
+    <settings>
+        <setting name="mapUnderscoreToCamelCase" value="true"/>
+        <setting name="jdbcTypeForNull" value="NULL"/>
+    </settings>
+
+    <typeAliases>
+        <typeAlias alias="CreationContext" type="com.claro.sp.automation.lineas.domain.line.CreationContext"/>
+        <typeAlias alias="AssignSimRequest" type="com.claro.sp.automation.lineas.domain.line.AssignSimRequest"/>
+        <typeAlias alias="SimData" type="com.claro.sp.automation.lineas.domain.line.SimData"/>
+    </typeAliases>
+
+    <mappers>
+        <mapper resource="mappers/prod/ProdLineMapper.xml"/>
+        <mapper resource="mappers/ccard/CcardLineMapper.xml"/>
+        <mapper resource="mappers/migration/LineMigrationMapper.xml"/>
+    </mappers>
+</configuration>

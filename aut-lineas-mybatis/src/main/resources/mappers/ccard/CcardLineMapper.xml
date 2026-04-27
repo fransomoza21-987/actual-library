@@ -1,0 +1,88 @@
+﻿<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.claro.sp.automation.lineas.mapper.ccard.CcardLineMapper">
+    <select id="findPrefix" resultType="string">
+        select ppa_value
+          from prepay_parameters
+         where ppa_name in ('PREFIJOS_GSM_CPP')
+           and rownum = 1
+    </select>
+
+    <select id="countHandle" parameterType="string" resultType="int">
+        select count(1) from prepay_cellulars where pce_handle = #{handle}
+    </select>
+
+    <select id="nextHandle" resultType="string">
+        select CCARD.SEQ_PCE_ID.nextval from dual
+    </select>
+
+    <insert id="insertPrepayCellular" parameterType="CreationContext">
+        <![CDATA[
+        declare
+          v_cpam_ddi_call      call_parameters.cpam_ddi_call%type;
+          v_cpam_ddn_call      call_parameters.cpam_ddn_call%type;
+          v_cpam_local_call    call_parameters.cpam_local_call%type;
+          v_cpam_incoming_call call_parameters.cpam_incoming_call%type;
+          v_cpam_aty_id        call_parameters.cpam_aty_id%type;
+          v_cpam_lty_id        call_parameters.cpam_lty_id%type;
+          v_cpam_sys_code_id   call_parameters.cpam_sys_code_id%type;
+        begin
+          select cpam_ddi_call, cpam_ddn_call, cpam_local_call, cpam_incoming_call,
+                 cpam_aty_id, cpam_lty_id, cpam_sys_code_id
+            into v_cpam_ddi_call, v_cpam_ddn_call, v_cpam_local_call, v_cpam_incoming_call,
+                 v_cpam_aty_id, v_cpam_lty_id, v_cpam_sys_code_id
+            from call_parameters
+           where sysdate between cpam_start_date and cpam_end_date
+             and rownum = 1;
+          insert into prepay_cellulars
+            (pce_handle, pce_clu_cellular_number, pce_pcs_id_actual, pce_pcs_id_before,
+             pce_pcc_id, pce_last_status_update, pce_last_update, pce_add_date,
+             pce_available_amount, pce_ddi, pce_ddn, pce_loc, pce_incoming,
+             pce_anouncement, pce_prev_amount, pce_lang_id, pce_account_amount,
+             pce_sys_code_id, pce_first_call_date, pce_last_call_date, pce_percentage,
+             pce_due_amount_date, pce_suspend_date, pce_cancel_date, pce_expiration_date,
+             pce_psa_action_status, pce_err_id)
+          values
+            (#{handle}, #{cellularNumber}, #{statusPpay}, #{statusPpay}, 'NM', sysdate,
+             sysdate, sysdate, 0, v_cpam_ddi_call, v_cpam_ddn_call, v_cpam_local_call,
+             v_cpam_incoming_call, v_cpam_aty_id, 0, v_cpam_lty_id, 0, v_cpam_sys_code_id,
+             sysdate, sysdate, 0, trunc(sysdate), trunc(sysdate) + 300, trunc(sysdate) + 300,
+             trunc(sysdate) + 300, 'N', 0);
+        end;
+        ]]>
+    </insert>
+
+    <insert id="insertNumberChange" parameterType="CreationContext">
+        insert into cellular_number_changes
+            (cnc_handle, cnc_clu_cellular, cnc_add_date, cnc_last_update_date, cnc_start_date, cnc_end_date)
+        values
+            (#{handle}, #{cellularNumber}, sysdate, sysdate, sysdate, null)
+    </insert>
+
+    <insert id="insertPpServiceStatus" parameterType="CreationContext">
+        insert into pp_service_status
+            (pss_handle, pss_clu_cellular_number, pss_activation_date, pss_pcs_id_actual, pss_start_date, pss_last_updated_date)
+        values
+            (#{handle}, #{cellularNumber}, sysdate, #{statusPpay}, sysdate, sysdate)
+    </insert>
+
+    <delete id="deleteSubscriber">
+        <![CDATA[
+        declare
+          v_owner varchar2(128) := #{owner};
+        begin
+          delete from cellular_number_changes where cnc_clu_cellular = #{cellularNumber};
+          delete from prepay_cellulars where pce_clu_cellular_number = #{cellularNumber};
+          delete from pp_service_status_hist where psh_clu_cellular_number = #{cellularNumber};
+          begin
+            execute immediate 'delete from ' || v_owner || '.hubble_interfaces_tmp where hin_cellular_number = :linea' using #{cellularNumber};
+          exception
+            when others then null;
+          end;
+        end;
+        ]]>
+    </delete>
+</mapper>
+
